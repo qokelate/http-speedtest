@@ -46,12 +46,15 @@ std::string speed_to_unit_string(size_t speed)
     return std::string(tmp1, len1);
 }
 
-uint64_t string_to_size(const std::string& datasize)
+uint64_t string_to_size(const std::string& datasize1)
 {
+    std::string datasize = datasize1;
+    std::transform(datasize.begin(), datasize.end(), datasize.begin(), ::toupper);
     auto sz = strtoull(datasize.c_str(), NULL, 10);
 
-    if (datasize.find('M') != std::string::npos) sz *= (1024 * 1024);
-    else if (datasize.find('G') != std::string::npos) sz *= (1024 * 1024 * 1024);
+    if (datasize.find('K') != std::string::npos) sz *= SCEConst1K;
+    else if (datasize.find('M') != std::string::npos) sz *= SCEConst1M;
+    else if (datasize.find('G') != std::string::npos) sz *= SCEConst1G;
     return sz;
 }
 
@@ -65,11 +68,10 @@ int server_main(int argc, char **argv)
 
         auto id = (uint32_t)(get_timestamp_ms() - start_time_ms);
 
-        size_t sz = 1024 * 1024 * 100; //100M
+        size_t sz = SCEConst1M * 100;
         if (req.has_param("size"))
         {
             auto&& datasize = req.get_param_value("size");
-            std::transform(datasize.begin(), datasize.end(), datasize.begin(), ::toupper);
 
             sz = string_to_size(datasize);
             printf("new comming, %x, sending size=%zu,%s\n", id, sz, datasize.c_str());
@@ -170,22 +172,25 @@ int client_main(int argc, char **argv)
         std::string t1 = "/?size=300M";
         if (argc >= 4) t1 = std::string("/?size=") + argv[3];
 
-        printf("testing download ......\n");
+        printf("testing download, %s ......\n", t1.c_str() + 7);
         auto res = client.Get(t1.c_str(), [&](uint64_t len, uint64_t total) {
                 if (0 == time1)
                 {
                     datalen = total;
                     time1 = time(NULL);
                 }
-                time2 = time(NULL);
-                if (time2 > time1)
+                auto time3 = time(NULL);
+                if (time3 > time2 && time3 > time1)
                 {
+                    time2 = time3;
                     auto speed = len / (time2 - time1);
                     printf("%02d%% complete, download speed: %s\r", (int)(len * 100 / total), speed_to_unit_string(speed).c_str());
+                    fflush(stdout);
                 }
                 return true;
             }
         );
+
         printf("\n");
         if (res.error()) printf("[ERROR] code: %d\n", res.error());
         if (datalen && time2)
@@ -200,18 +205,20 @@ int client_main(int argc, char **argv)
         uint64_t time1 = 0;
         uint64_t time2 = 0;
 
-        uint64_t datalen = 1024 * 1024 * 300;
+        uint64_t datalen = SCEConst1M * 300;
         if (argc >= 5) datalen = string_to_size(argv[4]);
 
-        printf("testing uplaod ......\n");
+        printf("testing uplaod, size: %llu ......\n", datalen);
         auto res = client.Post("/", datalen, [&](size_t offset, size_t length, httplib::DataSink& sink) {
 
             if (0 == time1) time1 = time(NULL);
-            time2 = time(NULL);
-            if (time2 > time1)
+            auto time3 = time(NULL);
+            if (time3 > time2 && time3 > time1)
             {
+                time2 = time3;
                 auto speed = offset / (time2 - time1);
                 printf("%02d%% complete, upload speed: %s\r", (int)(offset * 100 / datalen), speed_to_unit_string(speed).c_str());
+                fflush(stdout);
             }
 
             char data[1024];
@@ -224,7 +231,7 @@ int client_main(int argc, char **argv)
 
         printf("\n");
         if (res.error()) printf("[ERROR] code: %d\n", res.error());
-        if (datalen && time2)
+        if (time2)
         {
             auto speed = datalen / (time2 - time1);
             printf("finished, upload speed: %s\n", speed_to_unit_string(speed).c_str());
