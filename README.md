@@ -18,7 +18,7 @@ test upload   ==> curl --data-binary @bigfile.bin 'http://192.168.0.2:8888'
 ```
 Server:
 
-docker run -p 8888:8888 -d http-speedtest:latest
+docker run -p 8888:8888 -d qokelate/http-speedtest:latest
 ```
 
 
